@@ -97,27 +97,30 @@ export async function POST(req: Request) {
     let extractedText = "";
 
     // 1. Perform rudimentary OCR / Text Extraction with Relaxed Timeout
-    // Tesseract takes time to load language models. A 10-second timeout is more realistic.
     const MAX_OCR_TIME = 10000;
-    const timeoutPromise = new Promise<never>((_, reject) => setTimeout(() => reject(new Error("OCR Timeout")), MAX_OCR_TIME));
 
     if (file.type === "application/pdf" || file.name.toLowerCase().endsWith('.pdf')) {
       try {
         const _pdfParse = require('pdf-parse');
+        const timeoutPromise = new Promise<never>((_, reject) => setTimeout(() => reject(new Error("OCR Timeout")), MAX_OCR_TIME));
         const pdfData = await Promise.race([_pdfParse(buffer), timeoutPromise]) as any;
         extractedText = pdfData.text;
       } catch (e) {
         console.log("PDF parse skipped or timed out");
       }
     } else if (file.type.startsWith("image/") || file.name.match(/\.(jpg|jpeg|png)$/i)) {
+      let worker: any = null;
       try {
-        // Create an explicit worker for more reliable extraction
-        const worker = await tesseract.createWorker('eng');
+        worker = await tesseract.createWorker('eng');
+        const timeoutPromise = new Promise<never>((_, reject) => setTimeout(() => reject(new Error("OCR Timeout")), MAX_OCR_TIME));
         const ret = await Promise.race([worker.recognize(buffer), timeoutPromise]) as any;
         extractedText = ret.data.text;
-        await worker.terminate();
       } catch (e) {
-        console.log("Tesseract skipped or timed out. Image might be too large or complex.", e);
+        console.log("Tesseract skipped or timed out.", e);
+      } finally {
+        if (worker) {
+          try { await worker.terminate(); } catch (e) { /* Ignore termination errors on timeout */ }
+        }
       }
     }
 
