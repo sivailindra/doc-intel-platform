@@ -1,0 +1,56 @@
+[
+  {
+    "id": "aadhaar_app",
+    "name": "Aadhaar Application Form",
+    "department": "UIDAI",
+    "required_fields": [
+      { "key": "full_name", "label": "Full Name", "type": "string" },
+      { "key": "dob", "label": "Date of Birth", "type": "date" },
+      { "key": "gender", "label": "Gender", "type": "string" },
+      { "key": "address", "label": "Address", "type": "string" }
+    ],
+    "authenticity_markers": ["uidai_logo", "signature_box"],
+    "language_support": ["English", "Hindi"]
+  },
+  {
+    "id": "pan_app",
+    "name": "PAN Card Application (Form 49A)",
+    "department": "Income Tax Department",
+    "required_fields": [
+      { "key": "assessing_officer_code", "label": "Assessing Officer Code", "type": "string" },
+      { "key": "full_name", "label": "Full Name", "type": "string" },
+      { "key": "father_name", "label": "Father's Name", "type": "string" },
+      { "key": "dob", "label": "Date of Birth / Incorporation", "type": "date" },
+      { "key": "aadhaar_num", "label": "Aadhaar Number", "type": "string" }
+    ],
+    "authenticity_markers": ["photo_box", "signature_box", "it_logo"],
+    "language_support": ["English", "Hindi"]
+  },
+  {
+    "id": "dl_app",
+    "name": "Driving License Application (Form 2)",
+    "department": "Parivahan",
+    "required_fields": [
+      { "key": "name", "label": "Name of the Applicant", "type": "string" },
+      { "key": "son_wife_daughter_of", "label": "Son/Wife/Daughter of", "type": "string" },
+      { "key": "permanent_address", "label": "Permanent Address", "type": "string" },
+      { "key": "vehicle_class", "label": "Class of Vehicle", "type": "string" }
+    ],
+    "authenticity_markers": ["rto_stamp", "applicant_signature"],
+    "language_support": ["English", "Telugu", "Tamil"]
+  },
+  {
+    "id": "voter_app",
+    "name": "Voter Enrolment (Form 6)",
+    "department": "Election Commission of India",
+    "required_fields": [
+      { "key": "state", "label": "State", "type": "string" },
+      { "key": "constituency", "label": "Assembly Constituency", "type": "string" },
+      { "key": "applicant_name", "label": "Name", "type": "string" },
+      { "key": "relative_name", "label": "Name of Relative", "type": "string" },
+      { "key": "age", "label": "Age", "type": "number" }
+    ],
+    "authenticity_markers": ["eci_logo", "declaration_signature"],
+    "language_support": ["English", "Hindi", "Telugu", "Tamil"]
+  }
+]
