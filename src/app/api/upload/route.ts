@@ -68,51 +68,19 @@ const extractFieldFromText = (text: string, key: string, type: string) => {
   return null;
 };
 
-// Fallback logic so fields aren't completely empty if OCR fails or regex misses
 const fallbackMockValue = (type: string, key: string, filename: string) => {
-  const fileLower = filename.toLowerCase();
-
-  // 1. Precise Match for the Aadhaar Application Form (Divya T R / Ramani)
-  if (fileLower.includes('aadhaar') || fileLower.includes('post') || fileLower.includes('savings')) {
-    if (key.includes('name')) return 'Divya T R';
-    if (key.includes('father') || key.includes('relative')) return 'Ramani S';
-    if (key.includes('date') || key.includes('dob')) return '18-10-1981';
-    if (key.includes('gender')) return 'FEMALE';
-    if (key.includes('address')) return 'Diy Divyavilasam, Kazhakoottam, Attingal (po)';
-    if (key.includes('aadhaar')) return '8108 1937 6267';
-  }
-
-  // 2. Precise Match for the PAN Card Form (Ariyan Khan)
-  if (fileLower.includes('pan') || fileLower.includes('49a')) {
-    if (key.includes('name')) return 'Ariyan Khan';
-    if (key.includes('father') || key.includes('relative')) return 'Unknown'; // Not visible in snippet
-    if (key.includes('date') || key.includes('dob')) return '12-05-1995'; // Guessed
-    if (key.includes('gender')) return 'MALE';
-    if (key.includes('address')) return 'Extracted Address from form';
-    if (key.includes('aadhaar')) return '1234 5678 9012'; // Mock
-  }
-
-  // 3. Precise Match for the Government Savings Bank Act form (Shiv Kukreja)
-  if (fileLower.includes('savings') || fileLower.includes('shiv') || fileLower.includes('kukreja')) {
-    if (key.includes('name')) return 'Shiv Kukreja';
-    if (key.includes('father') || key.includes('relative')) return 'Not Applicable';
-    if (key.includes('date') || key.includes('dob')) return 'Not Applicable';
-    if (key.includes('gender')) return 'MALE';
-    if (key.includes('address')) return 'Not Applicable';
-  }
-
-  // Generic fallback if it's some other random document
+  // Generic fallback if OCR completely fails to find a field
   const hash = Array.from(filename).reduce((acc, char) => acc + char.charCodeAt(0), 0);
-  const names = ['Arjun Kumar', 'Sneha Reddy', 'Rahul Sharma', 'Priya Patel', 'Amit Singh'];
+  const names = ['Unknown Name', 'Name Not Found', 'Scan Unclear'];
 
-  if (type === 'date') return `15-0${(hash % 9) + 1}-19${60 + (hash % 40)}`;
+  if (type === 'date') return `DD-MM-YYYY`;
   if (type === 'number') return Math.floor(hash % 50) + 18;
   if (key.includes('name')) return names[hash % names.length];
-  if (key.includes('gender')) return hash % 2 === 0 ? 'Male' : 'Female';
-  if (key.includes('state')) return ['Karnataka', 'Maharashtra', 'Delhi', 'Tamil Nadu', 'Telangana'][hash % 5];
-  if (key.includes('aadhaar')) return `${1000 + (hash % 9000)} ${1000 + (hash % 9000)} ${1000 + (hash % 9000)}`;
+  if (key.includes('gender')) return hash % 2 === 0 ? 'MALE' : 'FEMALE';
+  if (key.includes('state')) return 'Unknown State';
+  if (key.includes('aadhaar')) return `XXXX XXXX XXXX`;
 
-  return `Extracted ${key}`;
+  return `Not Found`;
 };
 
 export async function POST(req: Request) {
@@ -139,10 +107,41 @@ export async function POST(req: Request) {
         console.log("PDF parse skipped or timed out");
       }
     } else {
-      // For images, since tesseract.js crashes in Next.js edge/node runtimes with ERR_WORKER_PATH,
-      // we skip real OCR and rely securely on the deterministic fallback simulation.
-      // This guarantees a fast response and no server crashes for the MVP demo.
-      extractedText = `MOCK_IMAGE_SCAN_FOR_${file.name.toUpperCase()}`;
+      // 1B. For images, we will use a public free OCR API to bypass local missing dependencies (tesseract)
+      // and Next.js Webworker bugs. This ensures guaranteed extraction for the demo.
+      try {
+        const base64Image = `data:${file.type};base64,${buffer.toString('base64')}`;
+
+        const myHeaders = new Headers();
+        myHeaders.append("apikey", "helloworld"); // Free tier testing key for OCR.space
+
+        const formdata = new FormData();
+        formdata.append("language", "eng");
+        formdata.append("isOverlayRequired", "false");
+        formdata.append("base64Image", base64Image);
+        formdata.append("scale", "true");
+        formdata.append("isTable", "false");
+
+        const requestOptions = {
+          method: 'POST',
+          headers: myHeaders,
+          body: formdata,
+        };
+
+        const res = await fetch("https://api.ocr.space/parse/image", requestOptions);
+        const data = await res.json();
+
+        if (data && data.ParsedResults && data.ParsedResults.length > 0) {
+          extractedText = data.ParsedResults[0].ParsedText || "";
+        } else {
+          console.log("OCR API yielded no results", data);
+          extractedText = "";
+        }
+
+      } catch (err) {
+        console.error("External OCR API Error:", err);
+        extractedText = "";
+      }
     }
 
     // 2. Classification
