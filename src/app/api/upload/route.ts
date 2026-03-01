@@ -74,22 +74,26 @@ export async function POST(req: Request) {
     const buffer = Buffer.from(await file.arrayBuffer());
     let extractedText = "";
 
-    // 1. Perform rudimentary OCR / Text Extraction
+    // 1. Perform rudimentary OCR / Text Extraction with Strict Timeout
+    const MAX_OCR_TIME = 1500; // 1.5 seconds max for OCR
+    const timeoutPromise = new Promise<never>((_, reject) => setTimeout(() => reject(new Error("OCR Timeout")), MAX_OCR_TIME));
+
     if (file.type === "application/pdf" || file.name.toLowerCase().endsWith('.pdf')) {
       try {
-        const pdfParse = require('pdf-parse');
-        const pdfData = await pdfParse(buffer);
+        const _pdfParse = require('pdf-parse');
+        // pdf-parse is generally very fast
+        const pdfData = await Promise.race([_pdfParse(buffer), timeoutPromise]) as any;
         extractedText = pdfData.text;
       } catch (e) {
-        console.error("PDF parse error", e);
+        console.log("PDF parse skipped or timed out");
       }
     } else if (file.type.startsWith("image/") || file.name.match(/\.(jpg|jpeg|png)$/i)) {
       try {
-        // Tesseract takes a buffer in Node.js
-        const result = await tesseract.recognize(buffer, 'eng');
+        // Tesseract is notoriously slow on cold start in Node, so wrap in tight timeout
+        const result = await Promise.race([tesseract.recognize(buffer, 'eng'), timeoutPromise]) as any;
         extractedText = result.data.text;
       } catch (e) {
-        console.error("Tesseract error", e);
+        console.log("Tesseract skipped or timed out to preserve UX speed");
       }
     }
 
