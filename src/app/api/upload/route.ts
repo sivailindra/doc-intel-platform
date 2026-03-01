@@ -18,7 +18,7 @@ const determineTemplate = (text: string, filename: string) => {
   return templateDB[0]; // Default Aadhaar
 };
 
-// Extremely basic NER (Named Entity Recognition) simulation via Regex
+// More advanced NER simulation via Regex
 const extractFieldFromText = (text: string, key: string, type: string) => {
   const textClean = text.replace(/\n/g, ' ');
 
@@ -29,19 +29,32 @@ const extractFieldFromText = (text: string, key: string, type: string) => {
 
   if (key.includes('gender')) {
     if (textClean.match(/\b(male|female|transgender)\b/i)) {
-      return textClean.match(/\b(male|female|transgender)\b/i)?.[1] || 'Unknown';
+      return textClean.match(/\b(male|female|transgender)\b/i)?.[1].toUpperCase() || 'Unknown';
     }
   }
 
-  if (key.includes('name')) {
-    // Attempt to grab words right after "Name"
-    const nameMatch = textClean.match(/Name\s*[:\-]?\s*([A-Za-z ]+)/i);
-    if (nameMatch && nameMatch[1].trim().length > 2) return nameMatch[1].trim().substring(0, 30);
+  if (key.includes('name') && !key.includes('father') && !key.includes('relative')) {
+    // Attempt to grab words right after "Name", "Applicant", "To"
+    const nameMatch = textClean.match(/(?:Name|Applicant|To)[\s]*[:\-]?[\s]*([A-Za-z ]{3,30})/i);
+    // Filter out common false positives
+    if (nameMatch && nameMatch[1].trim().length > 2 && !nameMatch[1].toLowerCase().includes("father") && !nameMatch[1].toLowerCase().includes("signature")) {
+      return nameMatch[1].trim();
+    }
+  }
+
+  if (key.includes('father') || key.includes('relative')) {
+    const fMatch = textClean.match(/(?:Father|Husband|Wife|Daughter|Relative)[\w\s]*[:\-]?[\s]*([A-Za-z ]{3,30})/i);
+    if (fMatch) return fMatch[1].trim();
   }
 
   if (key.includes('aadhaar')) {
     const aMatch = textClean.match(/\b\d{4}\s\d{4}\s\d{4}\b/);
     if (aMatch) return aMatch[0];
+  }
+
+  if (key.includes('address')) {
+    const addMatch = textClean.match(/(?:Address)[\s]*[:\-]?[\s]*([A-Za-z0-9\s,\-\/]{10,60})/i);
+    if (addMatch) return addMatch[1].trim();
   }
 
   return null;
@@ -74,14 +87,14 @@ export async function POST(req: Request) {
     const buffer = Buffer.from(await file.arrayBuffer());
     let extractedText = "";
 
-    // 1. Perform rudimentary OCR / Text Extraction with Strict Timeout
-    const MAX_OCR_TIME = 1500; // 1.5 seconds max for OCR
+    // 1. Perform rudimentary OCR / Text Extraction with Relaxed Timeout
+    // Tesseract takes time to load language models. A 10-second timeout is more realistic.
+    const MAX_OCR_TIME = 10000;
     const timeoutPromise = new Promise<never>((_, reject) => setTimeout(() => reject(new Error("OCR Timeout")), MAX_OCR_TIME));
 
     if (file.type === "application/pdf" || file.name.toLowerCase().endsWith('.pdf')) {
       try {
         const _pdfParse = require('pdf-parse');
-        // pdf-parse is generally very fast
         const pdfData = await Promise.race([_pdfParse(buffer), timeoutPromise]) as any;
         extractedText = pdfData.text;
       } catch (e) {
@@ -89,11 +102,11 @@ export async function POST(req: Request) {
       }
     } else if (file.type.startsWith("image/") || file.name.match(/\.(jpg|jpeg|png)$/i)) {
       try {
-        // Tesseract is notoriously slow on cold start in Node, so wrap in tight timeout
+        // Run full Tesseract extraction up to 10 seconds
         const result = await Promise.race([tesseract.recognize(buffer, 'eng'), timeoutPromise]) as any;
         extractedText = result.data.text;
       } catch (e) {
-        console.log("Tesseract skipped or timed out to preserve UX speed");
+        console.log("Tesseract skipped or timed out. Image might be too large or complex.");
       }
     }
 
