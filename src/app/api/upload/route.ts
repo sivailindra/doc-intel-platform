@@ -18,9 +18,10 @@ const determineTemplate = (text: string, filename: string) => {
   return templateDB[0]; // Default Aadhaar
 };
 
-// More advanced NER simulation via Regex
+// Advanced NER simulation via Regex tailored for Indian Govt forms
 const extractFieldFromText = (text: string, key: string, type: string) => {
-  const textClean = text.replace(/\n/g, ' ');
+  // Normalize text: replace newlines with space, multiple spaces with single
+  const textClean = text.replace(/[\n\r]+/g, ' ').replace(/\s{2,}/g, ' ').trim();
 
   if (type === 'date' || key.includes('dob')) {
     const match = textClean.match(/\b(\d{2}[\/\-]\d{2}[\/\-]\d{4}|\d{4}[\/\-]\d{2}[\/\-]\d{2})\b/);
@@ -28,33 +29,41 @@ const extractFieldFromText = (text: string, key: string, type: string) => {
   }
 
   if (key.includes('gender')) {
-    if (textClean.match(/\b(male|female|transgender)\b/i)) {
-      return textClean.match(/\b(male|female|transgender)\b/i)?.[1].toUpperCase() || 'Unknown';
-    }
+    const gMatch = textClean.match(/\b(male|female|transgender)\b/i);
+    if (gMatch) return gMatch[1].toUpperCase();
   }
 
   if (key.includes('name') && !key.includes('father') && !key.includes('relative')) {
-    // Attempt to grab words right after "Name", "Applicant", "To"
-    const nameMatch = textClean.match(/(?:Name|Applicant|To)[\s]*[:\-]?[\s]*([A-Za-z ]{3,30})/i);
-    // Filter out common false positives
-    if (nameMatch && nameMatch[1].trim().length > 2 && !nameMatch[1].toLowerCase().includes("father") && !nameMatch[1].toLowerCase().includes("signature")) {
+    // Look for "Name of applicant", "Name", "Applicant", "To"
+    const nameMatch = textClean.match(/(?:Name\s+of\s+applicant|Name|Applicant|To)[\s]*[:\-]?[\s]*([A-Za-z\s]{3,30})(?:\s|$)/i);
+    if (nameMatch && nameMatch[1].trim().length > 2 && !nameMatch[1].toLowerCase().includes("father") && !nameMatch[1].toLowerCase().includes("signature") && !nameMatch[1].toLowerCase().includes("address")) {
       return nameMatch[1].trim();
     }
+
+    // Fallback: If it sees a signature block like "SHIV KUKREJA" next to "Specimen Signature"
+    const specMatch = textClean.match(/(?:Signature\(s\)|Applicant)\s+([A-Z\s]{4,30})/);
+    if (specMatch) return specMatch[1].trim();
   }
 
   if (key.includes('father') || key.includes('relative')) {
-    const fMatch = textClean.match(/(?:Father|Husband|Wife|Daughter|Relative)[\w\s]*[:\-]?[\s]*([A-Za-z ]{3,30})/i);
+    const fMatch = textClean.match(/(?:Father|Husband|Wife|Daughter|Relative)[\w\s]*[:\-]?[\s]*([A-Za-z\s]{3,30})/i);
     if (fMatch) return fMatch[1].trim();
   }
 
   if (key.includes('aadhaar')) {
-    const aMatch = textClean.match(/\b\d{4}\s\d{4}\s\d{4}\b/);
+    // Standard hyphenated or spaced Aadhaar
+    const aMatch = textClean.match(/\b\d{4}[\s\-]?\d{4}[\s\-]?\d{4}\b/);
     if (aMatch) return aMatch[0];
+
+    // Sometimes it just says "Aadhaar Card" and the name is next to it
+    if (textClean.match(/Aadhaar\s+Card\s+([A-Za-z\s]{4,20})/i)) {
+      if (key.includes('name')) return textClean.match(/Aadhaar\s+Card\s+([A-Za-z\s]{4,20})/i)?.[1].trim();
+    }
   }
 
   if (key.includes('address')) {
-    const addMatch = textClean.match(/(?:Address)[\s]*[:\-]?[\s]*([A-Za-z0-9\s,\-\/]{10,60})/i);
-    if (addMatch) return addMatch[1].trim();
+    const addMatch = textClean.match(/(?:Address)[\s]*[:\-]?[\s]*([A-Za-z0-9\s,\-\/\.\(\)]{10,80})/i);
+    if (addMatch && !addMatch[1].toLowerCase().includes('not applicable')) return addMatch[1].trim();
   }
 
   return null;
@@ -102,11 +111,13 @@ export async function POST(req: Request) {
       }
     } else if (file.type.startsWith("image/") || file.name.match(/\.(jpg|jpeg|png)$/i)) {
       try {
-        // Run full Tesseract extraction up to 10 seconds
-        const result = await Promise.race([tesseract.recognize(buffer, 'eng'), timeoutPromise]) as any;
-        extractedText = result.data.text;
+        // Create an explicit worker for more reliable extraction
+        const worker = await tesseract.createWorker('eng');
+        const ret = await Promise.race([worker.recognize(buffer), timeoutPromise]) as any;
+        extractedText = ret.data.text;
+        await worker.terminate();
       } catch (e) {
-        console.log("Tesseract skipped or timed out. Image might be too large or complex.");
+        console.log("Tesseract skipped or timed out. Image might be too large or complex.", e);
       }
     }
 
