@@ -12,8 +12,7 @@
     "next": "16.1.6",
     "pdf-parse": "^2.4.5",
     "react": "19.2.3",
-    "react-dom": "19.2.3",
-    "tesseract.js": "^7.0.0"
+    "react-dom": "19.2.3"
   },
   "devDependencies": {
     "@types/node": "^20",
