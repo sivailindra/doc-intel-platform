@@ -23,8 +23,9 @@ const extractFieldFromText = (text: string, key: string, type: string) => {
   const textClean = text.replace(/[\n\r]+/g, ' ').replace(/\s{2,}/g, ' ').trim();
 
   if (type === 'date' || key.includes('dob')) {
-    const match = textClean.match(/\b(\d{2}[\/\-]\d{2}[\/\-]\d{4}|\d{4}[\/\-]\d{2}[\/\-]\d{2})\b/);
-    if (match) return match[1];
+    // Looks for 12/05/1995 or 12-05-1995 or spaced out 1 2 0 5 1 9 9 5
+    const match = textClean.match(/\b(\d{2}[\/\-\s]*\d{2}[\/\-\s]*\d{4}|\d{4}[\/\-\s]*\d{2}[\/\-\s]*\d{2})\b/);
+    if (match) return match[1].replace(/\s/g, '');
   }
 
   if (key.includes('gender')) {
@@ -33,7 +34,11 @@ const extractFieldFromText = (text: string, key: string, type: string) => {
   }
 
   if (key.includes('name') && !key.includes('father') && !key.includes('relative')) {
-    // Look for "Name of applicant", "Name", "Applicant", "To"
+    // PAN Card name fields
+    const panNameMatch = textClean.match(/(?:Last Name\s*\/\s*Surname|First Name|Middle Name)[\s\_]*([A-Z\s]{4,30})/i);
+    if (panNameMatch) return panNameMatch[1].replace(/_/g, '').trim();
+
+    // Standard Forms
     const nameMatch = textClean.match(/(?:Name\s+of\s+applicant|Name|Applicant|To)[\s]*[:\-]?[\s]*([A-Za-z\s]{3,30})(?:\s|$)/i);
     if (nameMatch && nameMatch[1].trim().length > 2 && !nameMatch[1].toLowerCase().includes("father") && !nameMatch[1].toLowerCase().includes("signature") && !nameMatch[1].toLowerCase().includes("address")) {
       return nameMatch[1].trim();
@@ -45,7 +50,7 @@ const extractFieldFromText = (text: string, key: string, type: string) => {
   }
 
   if (key.includes('father') || key.includes('relative')) {
-    const fMatch = textClean.match(/(?:Father|Husband|Wife|Daughter|Relative)[\w\s]*[:\-]?[\s]*([A-Za-z\s]{3,30})/i);
+    const fMatch = textClean.match(/(?:Father|Husband|Wife|Daughter|Relative)[\w\s\/\.'\-]*[:\-\s]+([A-Za-z\s]{3,30})/i);
     if (fMatch) return fMatch[1].trim();
   }
 
@@ -107,40 +112,29 @@ export async function POST(req: Request) {
         console.log("PDF parse skipped or timed out");
       }
     } else {
-      // 1B. For images, we will use a public free OCR API to bypass local missing dependencies (tesseract)
-      // and Next.js Webworker bugs. This ensures guaranteed extraction for the demo.
+      // 1B. Real OCR using a dedicated Node.js child process to bypass Next.js Turbopack worker bugs
+      const { exec } = require('child_process');
+      const fs = require('fs');
+      const path = require('path');
+      const os = require('os');
+      const util = require('util');
+      const execAsync = util.promisify(exec);
+
+      const safeFilename = file.name.replace(/[^a-zA-Z0-9.]/g, '');
+      const tempFilePath = path.join(os.tmpdir(), `upload_${Date.now()}_${safeFilename}`);
+      fs.writeFileSync(tempFilePath, buffer);
+
       try {
-        const base64Image = `data:${file.type};base64,${buffer.toString('base64')}`;
-
-        const myHeaders = new Headers();
-        myHeaders.append("apikey", "helloworld"); // Free tier testing key for OCR.space
-
-        const formdata = new FormData();
-        formdata.append("language", "eng");
-        formdata.append("isOverlayRequired", "false");
-        formdata.append("base64Image", base64Image);
-        formdata.append("scale", "true");
-        formdata.append("isTable", "false");
-
-        const requestOptions = {
-          method: 'POST',
-          headers: myHeaders,
-          body: formdata,
-        };
-
-        const res = await fetch("https://api.ocr.space/parse/image", requestOptions);
-        const data = await res.json();
-
-        if (data && data.ParsedResults && data.ParsedResults.length > 0) {
-          extractedText = data.ParsedResults[0].ParsedText || "";
-        } else {
-          console.log("OCR API yielded no results", data);
-          extractedText = "";
-        }
-
+        const workerScript = path.join(process.cwd(), 'src', 'lib', 'ocr-worker.js');
+        // Execute the secluded tesseract script, strictly giving it 25 seconds max
+        const { stdout } = await execAsync(`node "${workerScript}" "${tempFilePath}"`, { timeout: 25000 });
+        extractedText = stdout || "";
+        console.log("Raw OCR Data:", extractedText.substring(0, 300) + '...');
       } catch (err) {
-        console.error("External OCR API Error:", err);
+        console.error("Isolated OCR Worker Error:", err);
         extractedText = "";
+      } finally {
+        try { fs.unlinkSync(tempFilePath); } catch (e) { }
       }
     }
 
