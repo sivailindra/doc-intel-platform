@@ -111,7 +111,12 @@ export async function POST(req: Request) {
     } else if (file.type.startsWith("image/") || file.name.match(/\.(jpg|jpeg|png)$/i)) {
       let worker: any = null;
       try {
-        worker = await tesseract.createWorker('eng');
+        // In Next.js App Router, Tesseract struggles to find its own worker script. We must provide explicit paths.
+        worker = await tesseract.createWorker('eng', 1, {
+          workerPath: 'https://cdn.jsdelivr.net/npm/tesseract.js@v5.0.0/dist/worker.min.js',
+          langPath: 'https://tessdata.projectnaptha.com/4.0.0',
+          corePath: 'https://cdn.jsdelivr.net/npm/tesseract.js-core@v5.0.0',
+        });
         const timeoutPromise = new Promise<never>((_, reject) => setTimeout(() => reject(new Error("OCR Timeout")), MAX_OCR_TIME));
         const ret = await Promise.race([worker.recognize(buffer), timeoutPromise]) as any;
         extractedText = ret.data.text;
