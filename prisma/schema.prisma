@@ -1,0 +1,99 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Template {
+  id              String      @id @default(uuid())
+  name            String
+  description     String?
+  department      String?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  
+  applicants      Applicant[]
+}
+
+model Applicant {
+  id                    String    @id @default(uuid())
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  templateId            String?
+  template              Template? @relation(fields: [templateId], references: [id])
+
+  // System Metadata
+  overallConfidence     Float?
+  authenticityVerified  Boolean   @default(false)
+  fraudFlags            String?   // JSON string array
+  status                String    @default("pending") // pending, approved, flagged
+  
+  // The 16 Requested Fields (as string/boolean where appropriate)
+  // Field 1: Name of the application form
+  applicationFormName   String?
+  applicationFormNameConf Float?
+
+  // Field 2: Name of customer/entity/applicant/enterprise
+  applicantName         String?
+  applicantNameConf     Float?
+
+  // Field 3: Father & mother name
+  parentName            String?
+  parentNameConf        Float?
+
+  // Field 4: DOB & age
+  dobAndAge             String?
+  dobAndAgeConf         Float?
+
+  // Field 5: Gender
+  gender                String?
+  genderConf            Float?
+
+  // Field 6: Photo pasted on form
+  photoPasted           Boolean?
+  photoPastedConf       Float?
+
+  // Field 7: Phone number
+  phoneNumber           String?
+  phoneNumberConf       Float?
+
+  // Field 8: Address
+  address               String?
+  addressConf           Float?
+
+  // Field 9: PIN
+  pin                   String?
+  pinConf               Float?
+
+  // Field 10: Email
+  email                 String?
+  emailConf             Float?
+
+  // Field 11: Signed
+  isSigned              Boolean?
+  isSignedConf          Float?
+
+  // Field 12: Government seal/stamp
+  hasGovtSeal           Boolean?
+  hasGovtSealConf       Float?
+
+  // Field 13: Purpose of the application form
+  purpose               String?
+  purposeConf           Float?
+
+  // Field 14: Aadhar number
+  aadharNumber          String?
+  aadharNumberConf      Float?
+
+  // Field 15: Pan
+  panNumber             String?
+  panNumberConf         Float?
+
+  // Field 16: Place of birth
+  placeOfBirth          String?
+  placeOfBirthConf      Float?
+}
