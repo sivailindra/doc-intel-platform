@@ -1,0 +1,37 @@
+{
+  "templates": {
+    "aadhaar_app": {
+      "documentCount": 1,
+      "avgFieldCount": 26,
+      "commonFields": [
+        "Certificate Issue Date",
+        "Resident Type",
+        "Request Type",
+        "Aadhaar Number (For update only)",
+        "Full Name",
+        "Care Of",
+        "House No./Bldg./Apt",
+        "Street/Road/Lane",
+        "Area/Locality/Sector",
+        "Village/Town/City",
+        "Post Office",
+        "District",
+        "State",
+        "PIN Code",
+        "Date of Birth",
+        "Resident Signature/Thumb Impression",
+        "Certifier Name",
+        "Certifier Designation",
+        "Certifier Office Address",
+        "Certifier Contact Number",
+        "Certifier Type",
+        "Checklist - No Overwriting",
+        "Checklist - Issue Date is Filed",
+        "Checklist - Resident's Signature",
+        "Checklist - Certifier's Details",
+        "Checklist - Resident's Photo is Cross Signed and Cross Stamped"
+      ],
+      "lastLearned": "2026-03-07T18:21:52.047Z"
+    }
+  }
+}
